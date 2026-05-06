@@ -1,11 +1,14 @@
 import pygame
 import sys
+import torch
 from settings import *
 from environment.grid import HospitalGrid
+from environment.rl_env import CustomRLEnv
 from entities.agent import Agent
 from algorithms.deadlock import resolve_deadlocks
+from algorithms.rl_policy import YieldDQN
 
-def load_scenario(scenario_id, grid_data):
+def load_scenario(scenario_id, grid_data, device=None, policy_net=None):
     """6 Rigorous Edge Cases - Mathematically Synchronized for Guaranteed Collisions."""
     swarm = []
     
@@ -13,9 +16,9 @@ def load_scenario(scenario_id, grid_data):
         # EDGE CASE 1: The Funnel Choke
         print("\n--- Edge Case 1: The Funnel Choke ---")
         swarm = [
-            Agent(1, start_col=21, start_row=4, priority=PRIORITY_STANDARD),
-            Agent(2, start_col=23, start_row=4, priority=PRIORITY_STANDARD),
-            Agent(3, start_col=17, start_row=4, priority=PRIORITY_EMERGENCY)
+            Agent(1, start_col=21, start_row=4, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
+            Agent(2, start_col=23, start_row=4, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
+            Agent(3, start_col=17, start_row=4, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net)
         ]
         swarm[0].set_goal(grid_data, 4, 2)
         swarm[1].set_goal(grid_data, 5, 2)
@@ -25,8 +28,8 @@ def load_scenario(scenario_id, grid_data):
         # EDGE CASE 2: Overtake Protocol
         print("\n--- Edge Case 2: Overtake Protocol ---")
         swarm = [
-            Agent(1, start_col=10, start_row=21, priority=PRIORITY_STANDARD),
-            Agent(2, start_col=8, start_row=21, priority=PRIORITY_EMERGENCY)
+            Agent(1, start_col=10, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
+            Agent(2, start_col=8, start_row=21, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net)
         ]
         swarm[0].set_goal(grid_data, 13, 28)
         swarm[1].set_goal(grid_data, 13, 28) 
@@ -37,9 +40,9 @@ def load_scenario(scenario_id, grid_data):
         # Junction is at (Row 4, Col 12). Both agents are exactly 4 steps away.
         swarm = [
             # Blue moving Right (Starts at Col 8)
-            Agent(1, start_col=8, start_row=4, priority=PRIORITY_STANDARD),   
+            Agent(1, start_col=8, start_row=4, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),   
             # Red moving Up (Starts at Row 8)
-            Agent(2, start_col=12, start_row=8, priority=PRIORITY_EMERGENCY) 
+            Agent(2, start_col=12, start_row=8, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net) 
         ]
         swarm[0].set_goal(grid_data, 4, 28) 
         swarm[1].set_goal(grid_data, 4, 2)  
@@ -50,9 +53,9 @@ def load_scenario(scenario_id, grid_data):
         # Alley is Col 12. They meet exactly in the middle at Row 12.
         swarm = [
             # Blue moving Down (Starts at Row 8)
-            Agent(1, start_col=12, start_row=8, priority=PRIORITY_STANDARD),  
+            Agent(1, start_col=12, start_row=8, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),  
             # Red moving Up (Starts at Row 16)
-            Agent(2, start_col=12, start_row=16, priority=PRIORITY_EMERGENCY) 
+            Agent(2, start_col=12, start_row=16, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net) 
         ]
         swarm[0].set_goal(grid_data, 21, 12)
         swarm[1].set_goal(grid_data, 4, 12)
@@ -63,9 +66,9 @@ def load_scenario(scenario_id, grid_data):
         # Bottom Highway (Row 21). Both are Standard priority.
         swarm = [
             # Blue 1 moving Right (Starts at Col 10)
-            Agent(1, start_col=10, start_row=21, priority=PRIORITY_STANDARD),
+            Agent(1, start_col=10, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
             # Blue 2 moving Left (Starts at Col 18)
-            Agent(2, start_col=18, start_row=21, priority=PRIORITY_STANDARD)
+            Agent(2, start_col=18, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net)
         ]
         swarm[0].set_goal(grid_data, 21, 28)
         swarm[1].set_goal(grid_data, 21, 2)
@@ -76,11 +79,11 @@ def load_scenario(scenario_id, grid_data):
         # Junction is at (Row 21, Col 12). All 3 are exactly 4 steps away.
         swarm = [
             # Blue 1 moving Right (Starts at Col 8)
-            Agent(1, start_col=8, start_row=21, priority=PRIORITY_STANDARD),
+            Agent(1, start_col=8, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
             # Blue 2 moving Left (Starts at Col 16)
-            Agent(2, start_col=16, start_row=21, priority=PRIORITY_STANDARD),
+            Agent(2, start_col=16, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
             # Red moving Down (Starts at Row 17)
-            Agent(3, start_col=12, start_row=17, priority=PRIORITY_EMERGENCY)
+            Agent(3, start_col=12, start_row=17, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net)
         ]
         swarm[0].set_goal(grid_data, 21, 28)
         swarm[1].set_goal(grid_data, 21, 2)
@@ -94,7 +97,13 @@ def main():
     pygame.display.set_caption("Micro Swarm Edge Cases (Press 1-6)")
     clock = pygame.time.Clock()
     
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    policy_net = YieldDQN().to(device)
+    # policy_net.load_state_dict(torch.load('trained_yield_dqn.pth')) # Uncomment when trained
+    policy_net.eval()
+    
     hospital_grid = HospitalGrid()
+    rl_env = CustomRLEnv(hospital_grid)
     
     swarm = []
     scenario_active = False
@@ -106,16 +115,16 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_1: swarm, scenario_active = load_scenario(1, hospital_grid.map_data), True
-                elif event.key == pygame.K_2: swarm, scenario_active = load_scenario(2, hospital_grid.map_data), True
-                elif event.key == pygame.K_3: swarm, scenario_active = load_scenario(3, hospital_grid.map_data), True
-                elif event.key == pygame.K_4: swarm, scenario_active = load_scenario(4, hospital_grid.map_data), True
-                elif event.key == pygame.K_5: swarm, scenario_active = load_scenario(5, hospital_grid.map_data), True
-                elif event.key == pygame.K_6: swarm, scenario_active = load_scenario(6, hospital_grid.map_data), True
+                if event.key == pygame.K_1: swarm, scenario_active = load_scenario(1, hospital_grid.map_data, device, policy_net), True
+                elif event.key == pygame.K_2: swarm, scenario_active = load_scenario(2, hospital_grid.map_data, device, policy_net), True
+                elif event.key == pygame.K_3: swarm, scenario_active = load_scenario(3, hospital_grid.map_data, device, policy_net), True
+                elif event.key == pygame.K_4: swarm, scenario_active = load_scenario(4, hospital_grid.map_data, device, policy_net), True
+                elif event.key == pygame.K_5: swarm, scenario_active = load_scenario(5, hospital_grid.map_data, device, policy_net), True
+                elif event.key == pygame.K_6: swarm, scenario_active = load_scenario(6, hospital_grid.map_data, device, policy_net), True
 
         # --- PHYSICS & STATE LOGIC ---
         if scenario_active:
-            resolve_deadlocks(swarm, hospital_grid.map_data)
+            resolve_deadlocks(swarm, hospital_grid.map_data, rl_env)
             occupied_tiles = [(a.row, a.col) for a in swarm]
             
             for robot in swarm:
