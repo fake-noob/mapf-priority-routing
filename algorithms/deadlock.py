@@ -40,11 +40,13 @@ def resolve_deadlocks(swarm, grid_data, rl_env=None):
                             blocker.set_goal(grid_data, park_r, park_c, forcefield)
                         else:
                             # Fallback if RL suggests staying put but we are blocking
-                            blocker.set_goal(grid_data, blocker.original_goal[0], blocker.original_goal[1], forcefield)
+                            if blocker.original_goal:
+                                blocker.set_goal(grid_data, blocker.original_goal[0], blocker.original_goal[1], forcefield)
                     else:
                         # Fallback for when model/env is missing (e.g., baseline tests)
-                        park_r, park_c = blocker.original_goal[0], blocker.original_goal[1]
-                        blocker.set_goal(grid_data, park_r, park_c, forcefield)
+                        if blocker.original_goal:
+                            park_r, park_c = blocker.original_goal[0], blocker.original_goal[1]
+                            blocker.set_goal(grid_data, park_r, park_c, forcefield)
                         
                     # Blocker inherits priority to push others out of its escape route
                     blocker.priority = agent.priority

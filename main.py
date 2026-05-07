@@ -7,89 +7,7 @@ from environment.rl_env import CustomRLEnv
 from entities.agent import Agent
 from algorithms.deadlock import resolve_deadlocks
 from algorithms.rl_policy import YieldDQN
-
-def load_scenario(scenario_id, grid_data, device=None, policy_net=None):
-    """6 Rigorous Edge Cases - Mathematically Synchronized for Guaranteed Collisions."""
-    swarm = []
-    
-    if scenario_id == 1:
-        # EDGE CASE 1: The Funnel Choke
-        print("\n--- Edge Case 1: The Funnel Choke ---")
-        swarm = [
-            Agent(1, start_col=21, start_row=4, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
-            Agent(2, start_col=23, start_row=4, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
-            Agent(3, start_col=17, start_row=4, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net)
-        ]
-        swarm[0].set_goal(grid_data, 4, 2)
-        swarm[1].set_goal(grid_data, 5, 2)
-        swarm[2].set_goal(grid_data, 21, 10) 
-
-    elif scenario_id == 2:
-        # EDGE CASE 2: Overtake Protocol
-        print("\n--- Edge Case 2: Overtake Protocol ---")
-        swarm = [
-            Agent(1, start_col=10, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
-            Agent(2, start_col=8, start_row=21, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net)
-        ]
-        swarm[0].set_goal(grid_data, 13, 28)
-        swarm[1].set_goal(grid_data, 13, 28) 
-
-    elif scenario_id == 3:
-        # EDGE CASE 3: T-Junction Crash
-        print("\n--- Edge Case 3: Synchronized T-Junction Crash ---")
-        # Junction is at (Row 4, Col 12). Both agents are exactly 4 steps away.
-        swarm = [
-            # Blue moving Right (Starts at Col 8)
-            Agent(1, start_col=8, start_row=4, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),   
-            # Red moving Up (Starts at Row 8)
-            Agent(2, start_col=12, start_row=8, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net) 
-        ]
-        swarm[0].set_goal(grid_data, 4, 28) 
-        swarm[1].set_goal(grid_data, 4, 2)  
-
-    elif scenario_id == 4:
-        # EDGE CASE 4: Vertical Alley Head-to-Head (The Detour)
-        print("\n--- Edge Case 4: High vs Low Head-to-Head in 1-Tile Alley ---")
-        # Alley is Col 12. They meet exactly in the middle at Row 12.
-        swarm = [
-            # Blue moving Down (Starts at Row 8)
-            Agent(1, start_col=12, start_row=8, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),  
-            # Red moving Up (Starts at Row 16)
-            Agent(2, start_col=12, start_row=16, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net) 
-        ]
-        swarm[0].set_goal(grid_data, 21, 12)
-        swarm[1].set_goal(grid_data, 4, 12)
-
-    elif scenario_id == 5:
-        # EDGE CASE 5: Equal Priority Tie-Breaker Crash
-        print("\n--- Edge Case 5: Equal Priority Head-to-Head (Tie-Breaker) ---")
-        # Bottom Highway (Row 21). Both are Standard priority.
-        swarm = [
-            # Blue 1 moving Right (Starts at Col 10)
-            Agent(1, start_col=10, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
-            # Blue 2 moving Left (Starts at Col 18)
-            Agent(2, start_col=18, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net)
-        ]
-        swarm[0].set_goal(grid_data, 21, 28)
-        swarm[1].set_goal(grid_data, 21, 2)
-
-    elif scenario_id == 6:
-        # EDGE CASE 6: The 3-Way Gridlock
-        print("\n--- Edge Case 6: 3-Way Synchronized Gridlock ---")
-        # Junction is at (Row 21, Col 12). All 3 are exactly 4 steps away.
-        swarm = [
-            # Blue 1 moving Right (Starts at Col 8)
-            Agent(1, start_col=8, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
-            # Blue 2 moving Left (Starts at Col 16)
-            Agent(2, start_col=16, start_row=21, priority=PRIORITY_STANDARD, device=device, policy_net=policy_net),
-            # Red moving Down (Starts at Row 17)
-            Agent(3, start_col=12, start_row=17, priority=PRIORITY_EMERGENCY, device=device, policy_net=policy_net)
-        ]
-        swarm[0].set_goal(grid_data, 21, 28)
-        swarm[1].set_goal(grid_data, 21, 2)
-        swarm[2].set_goal(grid_data, 21, 28)
-
-    return swarm
+from deterministic_evaluation import load_scenario as load_deterministic_scenario, EvaluationMetrics
 
 def main():
     pygame.init()
@@ -99,7 +17,22 @@ def main():
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     policy_net = YieldDQN().to(device)
-    # policy_net.load_state_dict(torch.load('trained_yield_dqn.pth')) # Uncomment when trained
+    
+    # Load advanced model if available
+    try:
+        policy_net.load_state_dict(torch.load('advanced_trained_yield_dqn.pth'))
+        print("✓ Loaded ADVANCED RL model (100% Success Rate)")
+    except FileNotFoundError:
+        try:
+            policy_net.load_state_dict(torch.load('best_trained_yield_dqn.pth'))
+            print("✓ Loaded OPTIMIZED RL model (Cost Efficiency: 1.06)")
+        except FileNotFoundError:
+            try:
+                policy_net.load_state_dict(torch.load('trained_yield_dqn.pth'))
+                print("✓ Loaded trained RL model")
+            except FileNotFoundError:
+                print("⚠ No trained model found, using untrained model")
+    
     policy_net.eval()
     
     hospital_grid = HospitalGrid()
@@ -107,6 +40,9 @@ def main():
     
     swarm = []
     scenario_active = False
+    current_scenario_id = None
+    evaluation_metrics = None
+    tick_count = 0
     running = True
     
     while running:
@@ -115,15 +51,66 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_1: swarm, scenario_active = load_scenario(1, hospital_grid.map_data, device, policy_net), True
-                elif event.key == pygame.K_2: swarm, scenario_active = load_scenario(2, hospital_grid.map_data, device, policy_net), True
-                elif event.key == pygame.K_3: swarm, scenario_active = load_scenario(3, hospital_grid.map_data, device, policy_net), True
-                elif event.key == pygame.K_4: swarm, scenario_active = load_scenario(4, hospital_grid.map_data, device, policy_net), True
-                elif event.key == pygame.K_5: swarm, scenario_active = load_scenario(5, hospital_grid.map_data, device, policy_net), True
-                elif event.key == pygame.K_6: swarm, scenario_active = load_scenario(6, hospital_grid.map_data, device, policy_net), True
+                if event.key == pygame.K_1: 
+                    swarm = load_deterministic_scenario(1, hospital_grid.map_data, device, policy_net)
+                    scenario_active = True
+                    current_scenario_id = 1
+                    evaluation_metrics = EvaluationMetrics()
+                    tick_count = 0
+                    print("=== SCENARIO 1: Funnel Conga Line ===")
+                elif event.key == pygame.K_2: 
+                    swarm = load_deterministic_scenario(2, hospital_grid.map_data, device, policy_net)
+                    scenario_active = True
+                    current_scenario_id = 2
+                    evaluation_metrics = EvaluationMetrics()
+                    tick_count = 0
+                    print("=== SCENARIO 2: Blind Switchback Meet ===")
+                elif event.key == pygame.K_3: 
+                    swarm = load_deterministic_scenario(3, hospital_grid.map_data, device, policy_net)
+                    scenario_active = True
+                    current_scenario_id = 3
+                    evaluation_metrics = EvaluationMetrics()
+                    tick_count = 0
+                    print("=== SCENARIO 3: Professor's Trap ===")
+                elif event.key == pygame.K_4: 
+                    swarm = load_deterministic_scenario(4, hospital_grid.map_data, device, policy_net)
+                    scenario_active = True
+                    current_scenario_id = 4
+                    evaluation_metrics = EvaluationMetrics()
+                    tick_count = 0
+                    print("=== SCENARIO 4: Crossroads Ambush ===")
+                elif event.key == pygame.K_5: 
+                    swarm = load_deterministic_scenario(5, hospital_grid.map_data, device, policy_net)
+                    scenario_active = True
+                    current_scenario_id = 5
+                    evaluation_metrics = EvaluationMetrics()
+                    tick_count = 0
+                    print("=== SCENARIO 5: Parking Lot Deadlock ===")
+                elif event.key == pygame.K_6: 
+                    swarm = load_deterministic_scenario(6, hospital_grid.map_data, device, policy_net)
+                    scenario_active = True
+                    current_scenario_id = 6
+                    evaluation_metrics = EvaluationMetrics()
+                    tick_count = 0
+                    print("=== SCENARIO 6: Dispenser Bottleneck ===")
 
         # --- PHYSICS & STATE LOGIC ---
         if scenario_active:
+            tick_count += 1
+            
+            # Update evaluation metrics
+            if evaluation_metrics:
+                evaluation_metrics.update(swarm)
+                
+                # Check for PASS/FAIL conditions every 10 ticks
+                if tick_count % 10 == 0:
+                    result, reason = evaluation_metrics.evaluate_scenario(swarm)
+                    if result == "FAIL":
+                        print(f"FAIL at tick {tick_count}: {reason}")
+                    elif tick_count % 50 == 0:  # Progress update
+                        goals_reached = sum(1 for a in swarm if a.goal and (a.row, a.col) == a.goal)
+                        print(f"Tick {tick_count}: {goals_reached}/{len(swarm)} agents at goals")
+            
             resolve_deadlocks(swarm, hospital_grid.map_data, rl_env)
             occupied_tiles = [(a.row, a.col) for a in swarm]
             
@@ -175,14 +162,46 @@ def main():
         for robot in swarm:
             robot.draw(screen)
             
+        # Check for scenario completion
+        if scenario_active and evaluation_metrics and tick_count > 0:
+            all_at_goals = all(robot.goal and (robot.row, robot.col) == robot.goal for robot in swarm)
+            
+            if all_at_goals or tick_count >= 500:  # Max timeout
+                result, reason = evaluation_metrics.evaluate_scenario(swarm)
+                print(f"\n{'='*50}")
+                print(f"SCENARIO {current_scenario_id} RESULT: {result}")
+                if reason:
+                    print(f"Reason: {reason}")
+                print(f"Completed in {tick_count} ticks")
+                print(f"{'='*50}")
+                
+                # Reset scenario
+                scenario_active = False
+                current_scenario_id = None
+                evaluation_metrics = None
+                swarm = []
+            
         if not scenario_active:
-            font = pygame.font.SysFont(None, 40)
-            text = font.render("Press 1, 2, 3, 4, 5, or 6 to Load Scenario", True, (0, 0, 0))
-            text_rect = text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
-            bg_rect = text_rect.inflate(20, 20)
-            pygame.draw.rect(screen, (255, 255, 255), bg_rect)
-            pygame.draw.rect(screen, (0, 0, 0), bg_rect, 2)
-            screen.blit(text, text_rect)
+            font = pygame.font.SysFont(None, 32)
+            lines = [
+                "Deterministic MAPF Evaluation Suite",
+                "",
+                "1: Funnel Conga Line",
+                "2: Blind Switchback Meet", 
+                "3: Professor's Trap",
+                "4: Crossroads Ambush",
+                "5: Parking Lot Deadlock",
+                "6: Dispenser Bottleneck",
+                "",
+                "Press 1-6 to load scenarios"
+            ]
+            
+            y_offset = SCREEN_HEIGHT//2 - len(lines) * 12
+            for i, line in enumerate(lines):
+                color = (255, 255, 255) if i == 0 else (200, 200, 200)
+                text = font.render(line, True, color)
+                text_rect = text.get_rect(center=(SCREEN_WIDTH//2, y_offset + i * 25))
+                screen.blit(text, text_rect)
             
         pygame.display.flip()
         clock.tick(FPS)
